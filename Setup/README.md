@@ -108,7 +108,7 @@ Once the image has been created, plug everything into the Pi EXCEPT the power. P
 
 ## SPEC Software Installation
 ##### 1. Clone the SPEC repository. 
-`git clone https://gitlab.com/deepanalyticsllc/spec.git`
+`git clone https://github.com/<USERNAME>/Flow_Academy_Spec.git`
 
 ##### 2. Run the setup script that will install the SPEC software.
 `cd spec`<br>
