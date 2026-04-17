@@ -83,7 +83,7 @@ In order to mount all of the pieces of the SPEC system together, we have a 3D-Pr
 
 
 ## Operating System Installation
-Note: In order to properly run the SPEC software, the IMU and camera need to be connected to the Pi.
+**Note: In order to properly run the SPEC software, the IMU and camera need to be connected to the Pi!!!!!!!**
 
 ##### 1. Download and install the [Raspberry Pi Imager](https://www.raspberrypi.com/software/) on your computer and insert the microSD card
 Select the operating system with or without the desktop. The desktop version is not necessary and will use more power (though you can turn off booting to desktop later). 
@@ -107,6 +107,7 @@ Once the image has been created, plug everything into the Pi EXCEPT the power. P
 ##### 6. Confirm Pi is connected to the internet via wifi, or plug in an ethernet cable.
 
 ## SPEC Software Installation
+**Note: In order to properly run the SPEC software, the IMU and camera need to be connected to the Pi!!!!!!!**
 ##### 1. Clone the SPEC repository. 
 `git clone https://github.com/<USERNAME>/Flow_Academy_Spec.git`
 
