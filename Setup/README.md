@@ -111,7 +111,7 @@ Once the image has been created, plug everything into the Pi EXCEPT the power. P
 `git clone https://github.com/<USERNAME>/Flow_Academy_Spec.git`
 
 ##### 2. Run the setup script that will install the SPEC software.
-`cd spec`<br>
+`cd Flow_Academy_Spec`<br>
 `./Setup/set_up_system.sh`<br>
 
 
