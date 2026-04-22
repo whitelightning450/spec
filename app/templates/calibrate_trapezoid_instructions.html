@@ -112,6 +112,15 @@
             This is not a mask but the area that will be transformed to give a bird's-eye or nadir view of the bank-mounted image 
             in order for the PIV algorithm to run correctly.
         </p>
+        <h2>Camera Height</h2>
+        <p>
+            To map the parallel lines, we use the camera’s height above the river, the angle that the camera is tilted, 
+            and its intrinsics matrix to calculate a transformation matrix, also known as a homography matrix. 
+            This transformation matrix is then used to warp a real-world rectangle to give a trapezoid whose sides 
+            follow the real-world parallel lines. You must enter your camera height above water into the box before proceeding
+            with the trapezoid selection. The live view will not be present until the camera height is entered, this is shown below.
+        </p>
+        <img src="{{ url_for('static', filename='images/sensor_height.jpg') }}" alt="Sensor Height">
         <h2>Roll Angle</h2>
         <p>
             On this page, you will see a bubble level at the top, displaying the roll angle of the SPEC based on the IMU.

@@ -115,10 +115,14 @@ Once the image has been created, plug everything into the Pi EXCEPT the power. P
 `./Setup/set_up_system.sh`<br>
 
 During the install, you will need to enter an SSID and password for you device. This is to connect to it in the field from a laptop. Example:
-`SSID: MyInitials_SPEC`<br>
-`password:  MyInitials_SPEC`<br>
+`SSID: <lowercaseinitials>spec`<br>
+`password:  <lowercaseinitials>_spec!`<br>
 
-You will also need to set up a hostname and password, this can be the same as the SSID/password for now.
+Make these the same as your Pi5 set up
+
+You will also need to set up a hostname and password, this can be the same as the SSID/password for now. When the install has completed:
+
+`sudo reboot`<br>
 
 ##### 3. To confirm the install is successful, connect a device to its captive portal. For example, on a mobile device, look for the Pi's wifi access point that you previously set. If you reach the SPEC login page, the system is working.
 

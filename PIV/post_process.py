@@ -93,14 +93,24 @@ def peak_finding(result_conv_ensemble, mask, int_area, minix, step, maxix,
         iiint = ss1[round(int_area // 2),
                     round(int_area // 2), :].reshape(1, 1, -1)
         ii = mask.flatten(order='F')[iiint.flatten(order='F') - 1].reshape(
-            iiint.shape, order='F')
+            iiint.shape, order='F')-1
 
         # Change ii values to 0 and nans to 0 to follow matlab layout
         result_conv_ensemble[:, :, ii] = 0
         result_conv_ensemble = np.nan_to_num(result_conv_ensemble)
 
-    indices = np.where(result_conv_ensemble == 255)
-    y, x_piv, z = indices
+
+    flat_indices = np.flatnonzero(result_conv_ensemble.flatten(order='F') == 255)
+
+    # Step 2: convert to subscripts (Fortran order)
+    y, x_piv, z = np.unravel_index(
+        flat_indices,
+        result_conv_ensemble.shape,
+        order='F'
+    )
+    
+    # indices = np.where(result_conv_ensemble == 255)
+    # y, x_piv, z = indices
 
     # Extract only one peak from each couple of pictures
     zi = np.argsort(z)

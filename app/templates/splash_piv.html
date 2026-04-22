@@ -148,17 +148,30 @@
     {% if g.process_running %}
         <div class="banner">PIV Process is running</div>
     {% endif %}
+    {% if not g.imu_connected %}
+        <div class="alert text-center fw-bold"
+            style="background-color:#cc0000; color:white; font-size:1.2rem; border:none;">
+            IMU not connected. Please check and RESTART device.
+        </div>
+    {% endif %}
     <div class="spacer"></div>
     <div class="logo">
         <img src="{{ url_for('static', filename='images/SPEC_logo.png') }}" alt="Logo" style="width: 120%; height: auto; border-radius: 10px; ">
     </div>
     <h2 class="highlighted-title">PIV Functions</h2>
     <div class="content">
-
+        <div id="errorActions" style="display:none; margin-top:15px;">
+            <div class=button-container>
+                <button onclick="location.href='/splash_calib_setup'">
+                    Go to Calibration Menu
+                </button>
+            </div>
+        </div>
         <div class="button-container">
             
             <!--PIV-->
-            <button onclick="location.href='/test'">Run Test</button>
+
+            <button id="runTestButton">Run Test</button>
             
             {% if g.process_running %}
                 <button onclick="document.getElementById('stopPIVForm').submit();">Stop PIV</button>
@@ -216,6 +229,28 @@
         if (errorMessage) {
             alert(decodeURIComponent(errorMessage));  // Display the decoded error message in a pop-up
         }
+        document.getElementById("runTestButton").onclick = function() {
+
+            fetch("/check_before_test")
+            .then(response => response.json())
+            .then(data => {
+
+                if (data.status === "ok") {
+                    window.location.href = "/test";
+                } else {
+                    alert(data.messages.join("\n"));
+
+                    // Show fix buttons
+                    document.getElementById("errorActions").style.display = "block";
+                }
+
+            })
+            .catch(err => {
+                alert("Error running checks.");
+                console.error(err);
+            });
+
+        };
     </script>
 </body>
 </html>

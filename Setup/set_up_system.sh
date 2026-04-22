@@ -1,6 +1,19 @@
 #!/bin/bash
 # set -xe
 
+# Get the directory the user ran the script from
+CURRENT_DIR_NAME="$(basename "$PWD")"
+
+if [ "$CURRENT_DIR_NAME" = "Setup" ]; then
+    echo ""
+    echo "❌ Please run this script from the main SPEC repository."
+    echo "Run it like this instead:"
+    echo ""
+    echo "    ./Setup/set_up_system.sh"
+    echo ""
+    exit 1
+fi
+
 source common_functions.sh
 
 # Step 1: Install Required Packages
@@ -28,7 +41,7 @@ sudo apt install -y gstreamer1.0-tools gstreamer1.0-plugins-base gstreamer1.0-pl
 sudo apt install -y wget
 sudo apt install -y v4l2loopback-dkms
 sudo apt install -y ffmpeg
-
+sudo apt install -y imagemagick
 sudo apt install ifupdown
 # Step 4: Configure Network Interface
 echo "Configuring network interface..."

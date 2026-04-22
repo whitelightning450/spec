@@ -216,6 +216,12 @@
     {% if g.process_running %}
         <div class="banner">PIV Process is running</div>
     {% endif %}
+    {% if not g.imu_connected %}
+        <div class="alert text-center fw-bold"
+            style="background-color:#cc0000; color:white; font-size:1.2rem; border:none;">
+            IMU not connected. Please check and RESTART device.
+        </div>
+    {% endif %}
     <div class="logo">
         <img src="{{ url_for('static', filename='images/SPEC_logo.png') }}" alt="Logo" style="width: 120%; height: auto; border-radius: 10px;">
     </div>

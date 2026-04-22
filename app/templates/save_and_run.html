@@ -184,18 +184,29 @@
     {% if g.process_running %}
         <div class="banner">PIV Process is running</div>
     {% endif %}
+    {% if not g.imu_connected %}
+        <div class="alert text-center fw-bold"
+            style="background-color:#cc0000; color:white; font-size:1.2rem; border:none;">
+            IMU not connected. Please check and RESTART device.
+        </div>
+    {% endif %}
     <div class="spacer"></div>
     <div class="logo">
         <img src="{{ url_for('static', filename='images/SPEC_logo.png') }}" alt="Logo" style="width: 120%; height: auto; border-radius: 10px;">
     </div>
     <h2 class="highlighted-subtitle">Do you want to save or delete your test files before starting the PIV process?</h2>
-
+    <div id="errorActions" style="display:none; margin-top:15px;">
+            <button onclick="location.href='/splash_calib_setup'">
+                Go to Calibration Menu
+            </button>
+    </div>
     <div class="button-container">
         
         <button onclick="location.href='/save_data_piv'">Save and Delete Test Files</button>
-        <form method="POST" action="{{ url_for('run_process') }}">
+        <!-- <form method="POST" action="{{ url_for('run_process') }}">
             <button type="submit">Run PIV</button>
-        </form>
+        </form> -->
+        <button id="runPIVButton">Run PIV</button>
         <button onclick="location.href='/splash'">Main Menu</button>
     </div>
     <!-- Disk Space Display Box (Always Visible) -->
@@ -204,19 +215,41 @@
         Space Run Out Date: <span id="days-till-run-out">{{ days_left }}</span>
     </div>
     <script>
-        function runPIV() {
-            fetch('{{ url_for("run_process") }}', {
-                method: 'POST' // Sends a POST request to the /run_process route
-            })
-            .then(response => response.json()) // Assuming the server returns a JSON response
+        document.getElementById("runPIVButton").onclick = function() {
+
+            fetch("/check_before_test")
+            .then(response => response.json())
             .then(data => {
-                alert(data.message); // Show success or error message from the server response
+
+                if (data.status === "ok") {
+                    window.location.href = "/run_process";
+                } else {
+                    alert(data.messages.join("\n"));
+
+                    // Show fix buttons
+                    document.getElementById("errorActions").style.display = "block";
+                }
+
             })
-            .catch(error => {
-                console.error('Error:', error);
-                alert('An error occurred while running PIV.');
+            .catch(err => {
+                alert("Error running checks.");
+                console.error(err);
             });
-        }
+
+        };
+        // function runPIV() {
+        //     fetch('{{ url_for("run_process") }}', {
+        //         method: 'POST' // Sends a POST request to the /run_process route
+        //     })
+        //     .then(response => response.json()) // Assuming the server returns a JSON response
+        //     .then(data => {
+        //         alert(data.message); // Show success or error message from the server response
+        //     })
+        //     .catch(error => {
+        //         console.error('Error:', error);
+        //         alert('An error occurred while running PIV.');
+        //     });
+        // }
     </script>
 </body>
 </html>

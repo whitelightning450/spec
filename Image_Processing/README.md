@@ -5,7 +5,7 @@ This directory contains scripts and data necessary for camera calibration and im
 - `misc/`: Contains additional scripts related to image processing.
     - `calibration.py`: A script for performing camera calibration.
     - `take_photos.py`: A script for taking photos to be used in camera calibration.
-    - /images_for_calibration: Stores the images the user takes with the take_photos.py script. These will be used by the calibration.py script.
+    - `/images_for_calibration`: Stores the images the user takes with the take_photos.py script. These will be used by the calibration.py script.
 - `camera calibration matrices`: Files containing camera calibration data.
 - `distortion coefficients`: Parameters that describe the distortion introduced by the camera lens.
 

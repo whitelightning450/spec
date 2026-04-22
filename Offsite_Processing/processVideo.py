@@ -58,8 +58,7 @@ def extract_frames(video_path, rate_in_seconds):
     print(f"Video FPS: {fps}, Total Frames: {total_frames}")
 
     # Calculate the frame interval
-    frame_interval = int(
-        fps * rate_in_seconds)  # Frames to skip based on the specified rate
+    frame_interval = 1##fps * rate_in_seconds)  # Frames to skip based on the specified rate
 
     frames = []  # List to store frames in memory
     frame_count = 0
@@ -101,8 +100,8 @@ def process_frame(frame):
     global Transform_matrix, x_dist, y_dist, mapx, mapy
     try:
 
-        undistorted_img = cv2.remap(frame, mapx, mapy, cv2.INTER_LINEAR)
-        transformed = cv2.warpPerspective(undistorted_img, Transform_matrix,
+        # undistorted_img = cv2.remap(frame, mapx, mapy, cv2.INTER_LINEAR)
+        transformed = cv2.warpPerspective(frame, Transform_matrix,
                                           (int(x_dist), int(y_dist)))
         return transformed
 
@@ -116,7 +115,7 @@ for root, _, files in os.walk(CURRENT_DIR):
     for file in files:
         file_path = os.path.join(root, file)
 
-        if file.lower().endswith('.mp4'):
+        if file.lower().endswith('.avi'):
             VIDEO_PATH = file_path
         elif file.lower().endswith('.json'):
             CONFIG_PATH = file_path

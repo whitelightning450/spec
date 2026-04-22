@@ -10,7 +10,7 @@
         ],
         [
             0,
-            107080
+            1080
         ],
         [
             1920,
@@ -46,5 +46,9 @@
     "full_res_pixel_size": ".00145",
     "reduced_res_camera_pixel_size": "0.002900",
     "capture_time": "10",
-    "f_from_calib_matrix": ""
+    "f_from_calib_matrix": "",
+    "tare": {
+        "pitch_tare": 0,
+        "roll_tare": 0
+    }
 }

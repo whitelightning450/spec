@@ -10,6 +10,7 @@ import json
 import pickle
 import multiprocessing
 import shutil
+from scipy.signal import wiener
 """
 Video Frame Processing, Stabilization, and Homography-based Image Transformation
 
@@ -81,7 +82,7 @@ stabilize = None  # Stabilization configuration (if enabled)
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 BASE_DIR = os.path.dirname(CURRENT_DIR)
 SUPER_PATH = os.path.join(BASE_DIR, 'images')
-
+WINDOW = 5
 if not os.path.exists(SUPER_PATH):
     os.makedirs(SUPER_PATH)
 
@@ -177,7 +178,7 @@ def load_globals():
                                                  (width, height), 5)
 
         # CLAHE for contrast enhancement
-        CLAHE = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+        CLAHE = cv2.createCLAHE(clipLimit=2.55, tileGridSize=(8, 8))
 
         # Frame rate and duration
         FRAMERATE = float(config.get('frameInterval', '0'))
@@ -272,7 +273,7 @@ def undistort_homograph_clahe(img, index):
     Raises:
         Exception: If there is an error during undistortion or image processing.
     """
-    global mask, MAPX, MAPY, save_path
+    global mask, MAPX, MAPY, save_path, WINDOW
     try:
 
         if save:
@@ -283,8 +284,8 @@ def undistort_homograph_clahe(img, index):
             cv2.imwrite(raw_image_path, img)
 
         #Undistort the image
-        undistorted_img = cv2.remap(img, MAPX, MAPY, cv2.INTER_LINEAR)
-
+        # undistorted_img = cv2.remap(img, MAPX, MAPY, cv2.INTER_LINEAR)
+        undistorted_img = img
         #Transform image by extracting homography trapezoid
         img = extract_trapezoid(undistorted_img)
 
@@ -299,7 +300,10 @@ def undistort_homograph_clahe(img, index):
 
         # Filter image
         img = CLAHE.apply(img)
-
+        img = img.astype(np.float64)
+        img = wiener(img, (WINDOW, WINDOW))
+        img = np.clip(img, 0, 255).astype(np.uint8)
+        
         return img  #return processed image
 
     except Exception as e:
@@ -474,8 +478,8 @@ def main():
         t.join()
 
     #Move video to correct directory
-    video_path = os.path.join(f'{BASE_DIR}/save_data', 'video_output.mp4')
-    destination = os.path.join(save_path, f'{timestamp}_video.mp4')
+    video_path = os.path.join(f'{BASE_DIR}/save_data', 'video_output.avi')
+    destination = os.path.join(save_path, f'{timestamp}_video.avi')
     shutil.move(video_path, destination)
 
 

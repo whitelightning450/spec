@@ -5,7 +5,7 @@ After=multi-user.target startCaptivePortal.service
 [Service]
 # WorkingDirectory is needed so app.py finds credentials.json
 WorkingDirectory=/home/spec/spec
-ExecStart=/usr/bin/python3 /home/spec/spec/app/app.py
+ExecStart=/usr/bin/python3 -u /home/spec/spec/app/app.py
 StandardOutput=append:/var/log/spec_app.log
 StandardError=append:/var/log/spec_app.log
 Restart=on-failure

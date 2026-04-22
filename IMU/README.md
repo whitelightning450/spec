@@ -3,6 +3,7 @@ This directory contains the necessary scripts and files for collecting and calib
 
 ## Directory Structure
 - `misc/`: Contains additional scripts for IMU-related tasks.
+    - `tare_imu.py`: A script to find and save the tare values of the IMU.
     - `calibrate_imu.py`: A script for calibrating the IMU.
     - `find.py`: A utility script for finding and locating the IMU devices.
     - `testimu.py`: A script for testing the IMU functionality and ensuring that it is working correctly.

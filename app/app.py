@@ -151,19 +151,16 @@ login_manager.init_app(app)
 login_manager.login_view = 'login'
 users = {creds["USERNAME"]: {'password': creds["PASSWORD"]}}
 
+x_offset=None
 imu_angle = None
 script_process = None
 dewarped_frame = None
 video_handler = None
 
 # IMU setup
+current_square_points = None
 current_points = None
 current_angle = None
-address = 0x68
-bus = smbus.SMBus(1)
-imu = MPU9250.MPU9250(bus, address)
-imu.begin()
-imu.loadCalibDataFromFile(os.path.join(BASE_DIR, "IMU/calib.json"))
 
 SAVE_FOLDER_PATH = os.path.join(BASE_DIR, 'save_data')
 # Create the directory if it doesn't exist
@@ -188,11 +185,41 @@ FOCAL_LENGTH = float(config_data.get("focal_length"))
 WIDTH = int(config_data.get("reduced_image_width"))
 HEIGHT = int(config_data.get("reduced_image_height"))
 
+# IMU Tare
+PITCH_TARE = float(config_data["tare"]["pitch_tare"])
+ROLL_TARE = float(config_data["tare"]["roll_tare"])
+imu = None
+imu_connected = False
+imu_started = False
+prev_pitch = None
 
 # Login credentials (use environment variables or a secure method in production)
 USERNAME = creds["USERNAME"]
 PASSWORD = creds["PASSWORD"]
 
+#homography variables
+top_shift = 0.0      # meters
+bottom_shift = 0.2   # meters
+width_scale = 1.0    # scale factor
+rect_pixels = None
+world_rect_width = 0.25
+world_rect_height = 0.25
+world_x_shift = 0.0
+CAMERA_HEIGHT = None
+MIN_TOP_ALLOWED = 0
+MAX_TOP_ALLOWED = 0
+MIN_BOTTOM_ALLOWED = 0
+MAX_BOTTOM_ALLOWED = 0
+MIN_HEIGHT = 0.02
+prev_min_top_allowed = None
+prev_max_top_allowed = None
+prev_min_bottom_allowed = None
+prev_max_bottom_allowed = None
+dy_dbottom = 0.0
+dy_dtop = 0.0
+MIN_WIDTH_ALLOWED = 0
+MAX_WIDTH_ALLOWED = 0
+last_valid_x_shift = 0
 
 class User(UserMixin):
 
@@ -211,6 +238,7 @@ STARTUP_IDENTIFIER = "* Running on http://127.0.0.1:5000"
 with open(os.path.join(BASE_DIR, 'Image_Processing/cameraMatrix.pkl'),
           'rb') as f:
     camera_matrix = pickle.load(f)
+
 with open(os.path.join(BASE_DIR, 'Image_Processing/dist.pkl'), 'rb') as f:
     distortion_coefficients = pickle.load(f)
 
@@ -245,13 +273,16 @@ class User(UserMixin):
         self.id = id
         
         
-# Function to find the latest .pkl file in a directory
 def get_latest_results():
+    """
+    Function to find the latest .pkl file in a directory
+    """
     with open(SAVE_CONFIG, 'r') as sconfig:
-        save_info =json.load(sconfig)
+        save_info = json.load(sconfig)
     
     if 'latest_pickle' in save_info and save_info['latest_pickle']:
         return save_info['latest_pickle']   
+
 
 def process_data(file_path):
     """
@@ -261,7 +292,7 @@ def process_data(file_path):
         file_path (str): The directory path containing the CSV files.
 
     Returns:
-        dict: A dictionary where the keys are derived from the file names (last part after underscore) and 
+       data (dict): A dictionary where the keys are derived from the file names (last part after underscore) and 
               the values are numpy arrays of the data from each corresponding CSV file.
     """
     data = {}
@@ -273,7 +304,7 @@ def process_data(file_path):
     return data
 
 
-def homography_angle(v, h, t):
+def homography_angle(v, h, t,ratio):
     """
     Calculate the homography angle in radians.
 
@@ -285,11 +316,11 @@ def homography_angle(v, h, t):
     Returns:
         float: The homography angle, expressed as a fraction of pi (radians).
     """
-    phi = np.arctan((np.cos(t) * np.tan(h / 2) * ((1 / (np.cos(t + v / 2))) -
-                                                  (1 / (np.cos(t - v / 2))))) /
-                    (np.tan(v / 2) * ((1 / (np.cos(t + v / 2))) +
-                                      (1 / (np.cos(t - v / 2))))))
-    return phi / np.pi
+    phi = np.arctan((np.cos(t) * (ratio * np.tan(h )) * ((1 / (np.cos(t + v ))) -
+                                                  (1 / (np.cos(t - v ))))) /
+                    (np.tan(v ) * ((1 / (np.cos(t + v ))) +
+                                      (1 / (np.cos(t - v ))))))
+    return (2*phi)/np.pi
 
 
 def read_imu(imu):
@@ -297,16 +328,18 @@ def read_imu(imu):
     Read the IMU sensor and compute the orientation.
     
     Args:
-    imu (IMU): The IMU sensor object.
+        imu (IMU): The IMU sensor object.
     
     Returns:
-    float: The pitch angle in radians, adjusted to a coordinate system based on IMU positioning.
+        float: The pitch angle in radians, adjusted to a coordinate system based on IMU positioning.
     """
     imu.readSensor()
     imu.computeOrientation()
     ipitch, iroll, iyaw = imu.pitch, imu.roll, imu.yaw
+
     # Add 90 degrees to pitch as we define nadir = 0
-    return (np.radians(ipitch + 90), np.radians(iroll), np.radians(iyaw + 90))
+    # Include tare for pitch and roll, as produced from tare_imu.py during calibration of imu.
+    return (np.radians(ipitch + 90  - PITCH_TARE ), np.radians(iroll - ROLL_TARE), np.radians(iyaw + 90))
 
 
 def get_vert_horz_angle(sensor_width, sensor_height, focal_length):
@@ -314,15 +347,15 @@ def get_vert_horz_angle(sensor_width, sensor_height, focal_length):
     Calculate vertical and horizontal field of view angles in radians.
     
     Args:
-    sensor_width (float): Width of the sensor.
-    sensor_height (float): Height of the sensor.
-    focal_length (float): Focal length of the lens.
+        sensor_width (float): Width of the sensor.
+        sensor_height (float): Height of the sensor.
+        focal_length (float): Focal length of the lens.
     
     Returns:
-    tuple: Vertical and horizontal field of view angles in radians.
+        tuple: Vertical and horizontal field of view angles in radians.
     """
-    vertical = 2 * np.arctan(sensor_height / (2 * focal_length))
-    horizontal = 2 * np.arctan(sensor_width / (2 * focal_length))
+    vertical =  np.arctan(sensor_height / (2 * focal_length))
+    horizontal =  np.arctan(sensor_width / (2 * focal_length))
     return vertical, horizontal
 
 
@@ -334,18 +367,276 @@ def clamp(value, min_value, max_value):
     """
     Make's sure that the trapezoid does not extend further than the image size
     Args:
-    value (float): calculated values.
-    min_value (float): 0.
-    max_value (float): maximum value that trapezoid coordinate can be.
+        value (float): calculated values.
+        min_value (float): 0.
+        max_value (float): maximum value that trapezoid coordinate can be.
     
     Returns:
-    float: maximum value of the minimum (between the value and max dimension) and 0.
+        float: maximum value of the minimum (between the value and max dimension) and 0.
     """
     return max(min(value, max_value), min_value)
 
 
+def get_trapezoid_homography(height):
+    """
+    Compute the homography matrix to project world coordinates of the trapezoid
+    onto image coordinates based on the current camera pitch and height.
+    
+    Args:
+        height (float): The vertical distance from the camera to the reference plane.
+
+    Returns:
+        H (np.ndarray): A 3x3 homography matrix for projecting points from world space to image space.
+    """
+    
+    global imu_pitch, camera_matrix,prev_pitch
+    ALPHA = 0.1
+    if prev_pitch is None:
+        prev_pitch = imu_pitch
+
+    theta = ALPHA * imu_pitch + (1 - ALPHA) * prev_pitch
+    prev_pitch = theta
+
+
+    # theta = imu_pitch
+
+    R = np.array([
+            [1, 0, 0],
+            [0, np.cos(-theta), -np.sin(-theta)],
+            [0, np.sin(-theta),  np.cos(-theta)]
+        ])
+    r1 = R[:,0].reshape(3,1)
+    r2 = R[:,1].reshape(3,1)
+    t = np.array([[0],[0],[height]])
+    H = camera_matrix @ np.hstack([r1, r2, t])
+    
+    return H
+
+def find_limit_pixel(direction, step=2):
+    """
+    direction: 'top_up', 'top_down', 'bottom_up', 'bottom_down'
+    step: pixel step size for probing
+    """
+    global top_shift, bottom_shift, current_points
+
+    original_top = top_shift
+    original_bottom = bottom_shift
+
+    trapezoid = current_points.copy()
+    top_y = trapezoid[:,1].min()
+    bottom_y = trapezoid[:,1].max()
+
+    if direction == 'bottom_up':
+        probe = bottom_y
+        while True:
+            probe -= step
+            prev_bottom = bottom_shift
+            delta_pixel = probe - bottom_y
+            delta_world = delta_pixel / dy_dbottom
+            bottom_shift = max(prev_bottom + delta_world, top_shift + MIN_HEIGHT)
+
+            draw_trapezoid(CAMERA_HEIGHT)
+
+            new_bottom_y = current_points[:,1].max()
+            if abs(new_bottom_y - bottom_y) < 3:
+                break
+            bottom_y = new_bottom_y
+
+        limit = probe
+
+    # restore state
+    top_shift = original_top
+    bottom_shift = original_bottom
+    draw_trapezoid(CAMERA_HEIGHT)
+
+    return limit
+
+def draw_trapezoid(height):
+    """
+    Build and project the trapezoid into image coordinates, ensuring it stays within the image frame.
+    If any corner leaves the frame, the world-space parameters (top_shift, bottom_shift, width_scale, world_x_shift)
+    are adjusted iteratively until the trapezoid is fully in frame.
+
+    Args:
+        height (float): The vertical distance from the camera to the reference plane.
+
+    Modifies (global):
+        top_shift (float): Top Y-coordinate in world space, possibly corrected.
+        bottom_shift (float): Bottom Y-coordinate in world space, possibly corrected.
+        width_scale (float): Width scaling factor, possibly reduced to keep trapezoid in frame.
+        world_x_shift (float): Horizontal offset of the trapezoid in world space, possibly corrected.
+        current_points (np.ndarray): 4x2 array of trapezoid corners in image coordinates.
+    
+    Returns:
+        None
+    """
+    global top_shift, bottom_shift, width_scale, world_x_shift
+    global WIDTH, HEIGHT, current_points
+    global MIN_TOP_ALLOWED, MAX_TOP_ALLOWED
+    global MIN_BOTTOM_ALLOWED, MAX_BOTTOM_ALLOWED
+    global last_valid_x_shift
+
+    display_scale = CAMERA_HEIGHT
+
+    # Helpers
+    def compute_trapezoid(x_shift, top, bottom):
+        w = world_rect_width * width_scale * display_scale
+        h = world_rect_height * display_scale
+
+        rect = np.array([
+            [-w/2 + x_shift, -h/2 + top],
+            [ w/2 + x_shift, -h/2 + top],
+            [ w/2 + x_shift,  h/2 + bottom],
+            [-w/2 + x_shift,  h/2 + bottom],
+        ], dtype=np.float32).reshape(-1,1,2)
+
+        H = get_trapezoid_homography(height)
+        trap = cv2.perspectiveTransform(rect, H).reshape(4,2)
+
+        min_x = trap[:,0].min()
+        max_x = trap[:,0].max()
+        min_y = trap[:,1].min()
+        max_y = trap[:,1].max()
+
+        return trap, min_x, max_x, min_y, max_y
+
+    def clamp_step(val, gain=0.001):
+        return np.clip(val * gain, -0.05, 0.05)
+
+    # Init valid X
+    if not is_valid_geometry(top_shift, bottom_shift, width_scale, last_valid_x_shift, height):
+        last_valid_x_shift = world_x_shift
+
+    # Iterative solve
+    for _ in range(8):
+
+        trapezoid, min_x, max_x, min_y, max_y = compute_trapezoid(
+            world_x_shift, top_shift, bottom_shift
+        )
+
+        corrected = False
+
+
+        # X validation (accept / revert)
+
+        if 0 <= min_x and max_x <= WIDTH:
+            last_valid_x_shift = world_x_shift
+        else:
+            world_x_shift = last_valid_x_shift
+            trapezoid, min_x, max_x, min_y, max_y = compute_trapezoid(
+                world_x_shift, top_shift, bottom_shift
+            )
+            corrected = True
+
+
+        # Y correction
+
+        if min_y < 0:
+            top_shift += clamp_step(-min_y)
+            corrected = True
+
+        if max_y > HEIGHT:
+            bottom_shift -= clamp_step(max_y - HEIGHT)
+            corrected = True
+
+
+        # Revalidate X after Y change
+
+        if not is_valid_geometry(top_shift, bottom_shift, width_scale, world_x_shift, height):
+            world_x_shift = last_valid_x_shift
+            trapezoid, min_x, max_x, min_y, max_y = compute_trapezoid(
+                world_x_shift, top_shift, bottom_shift
+            )
+
+        if not corrected:
+            break
+
+    # Prevent collapse
+    if top_shift >= bottom_shift:
+        bottom_shift = top_shift + 0.01
+
+    # Save trapezoid
+    current_points = trapezoid[[1, 0, 3, 2]]
+
+    # Limits (unchanged logic)
+    def probe_limit(current, direction, param_name):
+        step = 0.01
+        value = current
+
+        for _ in range(80):
+            candidate = value + direction * step
+
+            if param_name == "top":
+                valid = is_valid_geometry(candidate, bottom_shift, width_scale, world_x_shift, height)
+            else:
+                valid = is_valid_geometry(top_shift, candidate, width_scale, world_x_shift, height)
+
+            if not valid:
+                break
+
+            value = candidate
+
+        return value
+
+    MIN_TOP_ALLOWED = probe_limit(top_shift, -1, "top")
+    MAX_TOP_ALLOWED = probe_limit(top_shift, +1, "top")
+
+    MIN_BOTTOM_ALLOWED = probe_limit(bottom_shift, -1, "bottom")
+    MAX_BOTTOM_ALLOWED = probe_limit(bottom_shift, +1, "bottom")
+
+    # debug_log(f"draw_trapezoid → top={top_shift:.4f}, bottom={bottom_shift:.4f}")
+
+
+def is_valid_geometry(test_top, test_bottom, test_width, test_x, height):
+    """
+    Checks if trapezoid is a valid geometry and withing the frame. 
+    
+    Returns: True or False
+    """
+    if test_width is None or test_x is None:
+        return False
+    display_scale = CAMERA_HEIGHT
+    if display_scale == None:
+        return False
+    w = world_rect_width * test_width * display_scale
+    h = world_rect_height * display_scale
+
+    world_rect = np.array([
+        [-w/2 + test_x, -h/2 + test_top],
+        [ w/2 + test_x, -h/2 + test_top],
+        [ w/2 + test_x,  h/2 + test_bottom],
+        [-w/2 + test_x,  h/2 + test_bottom],
+    ], dtype=np.float32).reshape(-1,1,2)
+
+    H = get_trapezoid_homography(height)
+    trap = cv2.perspectiveTransform(world_rect, H).reshape(4,2)
+
+    min_x = trap[:,0].min()
+    max_x = trap[:,0].max()
+    min_y = trap[:,1].min()
+    max_y = trap[:,1].max()
+
+
+    MIN_PIXEL_WIDTH = 20  # tune this (10–40)
+
+    if (max_x - min_x) < MIN_PIXEL_WIDTH:
+        return False
+    if min_x < 0 or max_x > WIDTH:
+        return False
+    if min_y < 0 or max_y > HEIGHT:
+        return False
+    if test_top >= test_bottom:
+        return False
+    top_width = np.linalg.norm(trap[0] - trap[1])
+    bottom_width = np.linalg.norm(trap[3] - trap[2])
+
+    if top_width < 10 or bottom_width < 10:
+        return False
+    
+    return True
+
 def get_trapezoid(angle):
-    global SENSOR_WIDTH, SENSOR_HEIGHT,FOCAL_LENGTH, WIDTH, HEIGHT
+    global SENSOR_WIDTH, SENSOR_HEIGHT,FOCAL_LENGTH, WIDTH, HEIGHT,x_offset
     """
     Find the trapezoid shape based on the current points and the angle of camera. The top two points are lined up on the same y value
     and the bottom two points are line up on the same y value. Based on the angle you get the distance in which the bottom coordinate is wider
@@ -354,16 +645,19 @@ def get_trapezoid(angle):
     and top right coordinates are never switched.
     
     Args:
-    angle (float): angle based off the imu and then calculated angle value
+        angle (float): angle based off the imu and then calculated angle value
     
     sets the global current_points to the new trapezoid points
     """
-    global current_points
+    global current_points,current_square_points
+    top_right, top_left, bottom_left, bottom_right = current_points
+    top_point = abs(top_right[0]-top_left[0])
+    ratio = (top_point/WIDTH)
+
+    angle = homography_angle(VERT_ANGLE, HORIZ_ANGLE, imu_pitch,ratio)
 
     frame_width = WIDTH  # Update with actual frame width
     frame_height = HEIGHT  # Update with actual frame height
-
-    top_right, top_left, bottom_left, bottom_right = current_points
 
     # Ensure bottom points share the same y-coordinate (height)
     bottom_right[1] = bottom_left[1]
@@ -376,33 +670,54 @@ def get_trapezoid(angle):
         print("Invalid height, cannot proceed with the trapezoid calculation.")
         return
 
-    x_offset = height * np.tan(angle)
-
+    # x_offset = height * np.tan(angle)
+    
     # Update bottom points based on the calculated x-offset
-    bottom_left[0] = top_left[0] - x_offset
-    bottom_right[0] = top_right[0] + x_offset
+    # bottom_left[0] = top_left[0] - x_offset
+    # bottom_right[0] = top_right[0] + x_offset
+    center_x = frame_width / 2
+    top_half_width = (top_right[0] - top_left[0]) / 2
+    top_y = top_left[1]
+    bottom_y = bottom_left[1]
     # Check if the bottom points exceed the frame bounds and adjust height until they are in frame
-    while bottom_left[0] < 0 or bottom_right[0] > frame_width:
-        # Reduce the height to bring bottom points inside the frame
-        height -= 10  # Adjust this step to be more or less aggressive
-        if height <= 0:
+    while True:
+            # Calculate x-offset for bottom based on angle and height
+            x_offset = height * np.tan(angle)
+            bottom_half_width = top_half_width + x_offset
 
-            print("Height adjustment failed, invalid trapezoid.")
-            return
-        # Update y-coordinates of bottom points to reduce height
-        bottom_left[1] = top_left[1] + height
-        bottom_right[1] = top_right[1] + height
-        x_offset = height * np.tan(angle)
+            # Update top x-coordinates (symmetric around center)
+            top_left[0] = int(center_x - top_half_width)
+            top_right[0] = int(center_x + top_half_width)
 
-        bottom_left[0] = top_left[0] - x_offset
-        bottom_right[0] = top_right[0] + x_offset
+            # Update bottom x-coordinates (symmetric around center)
+            bottom_left[0] = int(center_x - bottom_half_width)
+            bottom_right[0] = int(center_x + bottom_half_width)
+
+            # Update y-coordinates (keep user-controlled vertical positions)
+            top_left[1] = top_right[1] = top_y
+            bottom_left[1] = bottom_right[1] = bottom_y
+
+            # Check if bottom points are within frame
+            if bottom_left[0] >= 0 and bottom_right[0] <= frame_width:
+                break  # trapezoid is valid, exit loop
+
+            # Reduce height to bring trapezoid inside frame
+            height -= 10  # adjust step size as needed
+            if height <= 0:
+                print("Height adjustment failed, invalid trapezoid.")
+                return
+
+            # Adjust bottom y-coordinate proportionally to keep the trapezoid height
+            if bottom_y > top_y:
+                bottom_y = top_y + height
+            else:
+                bottom_y = top_y - height
         # print(x_offset)
     # Ensure the top-left x-coordinate is less than the top-right
     if top_left[0] > top_right[0]:
         print("Top left exceeds top right, invalid trapezoid.")
         return
-
-    # Update global current_points with the new trapezoid
+    
     current_points = top_right, top_left, bottom_left, bottom_right
 
 
@@ -411,27 +726,27 @@ def dewarp_frame(frame):
     Apply dewarping to the input frame using the predefined camera matrix and distortion coefficients.
     
     Args:
-    frame (array): current frame of video
+        frame (array): current frame of video
     
     Returns:
-    dewarped_frame (array): returns the dewarped frame
+        dewarped_frame (array): returns the dewarped frame
     """
     global mapx, mapy, newcameramtx
     # dewarped_frame = cv2.undistort(frame, camera_matrix, distortion_coefficients, None, newcameramtx)
     dewarped_frame = cv2.remap(frame, mapx, mapy, cv2.INTER_LINEAR)
-    return dewarped_frame
+    return frame # dewarped_frame
 
 
 def find_largest_trapezoid(angle):
-    global SENSOR_WIDTH, SENSOR_HEIGHT,FOCAL_LENGTH, WIDTH, HEIGHT
+    global SENSOR_WIDTH, SENSOR_HEIGHT,FOCAL_LENGTH, WIDTH, HEIGHT,current_square_points
     """
     Find the largest trapezoid that fits within the frame for a given angle.
     
     Args:
-    angle: Angle in radians.
+        angle (float): Angle in radians.
     
     Returns:
-    np.ndarray: Points of the largest trapezoid.
+        current_points (array): Points of the largest trapezoid.
     """
     frame_height, frame_width = HEIGHT, WIDTH
     max_height = frame_height
@@ -448,8 +763,9 @@ def find_largest_trapezoid(angle):
         else:
             max_height -= 10
             frame_height -= 10
-    return points
-
+            
+    current_points = top_right, top_left, bottom_left, bottom_right      
+    return current_points
 
 
 def imu_reader_thread():
@@ -461,7 +777,7 @@ def imu_reader_thread():
     while True:
 
         imu_pitch, imu_roll, imu_yaw = read_imu(imu)
-        imu_angle = homography_angle(VERT_ANGLE, HORIZ_ANGLE, imu_pitch) / np.pi
+        imu_angle = homography_angle(VERT_ANGLE, HORIZ_ANGLE, imu_pitch,ratio=1) #/ np.pi
         time.sleep(0.25)  # Adjust the sleep time as needed
 
 
@@ -470,26 +786,33 @@ def transformed(frame, points=None):
     This uses homography to transform the current frame for to show app user for the masking process
     
     Args:
-    frame (array): current frame
+        frame (array): current frame
     
     Returns:
-    transformed (array): homographied frame
+        transformed (array): homographied frame
     """
     global MAIN_CONFIG
+    
     dewarped = dewarp_frame(frame)
+    
     with open(MAIN_CONFIG, 'r') as f:
         config = json.load(f)
     try:
-        if points:
+       
+        if points is not None:
+            
             trapezoid_points = points
         else:
+           
             trapezoid_points = config.get('trapezoid_points', [])
-    except:
+    except Exception as e:
         return "No trapezoid points. Please run trapezoid calibrations"
+    
     pts1 = np.float32([
         trapezoid_points[1], trapezoid_points[0], trapezoid_points[2],
         trapezoid_points[3]
     ])
+   
     x_dist = abs(trapezoid_points[2][0] - trapezoid_points[3][0])
     y_dist = abs(trapezoid_points[3][1] - trapezoid_points[1][1])
     pts2 = np.float32([
@@ -498,11 +821,13 @@ def transformed(frame, points=None):
         [0, y_dist],
         [x_dist, y_dist],
     ])
+    
+ 
     Transform_matrix, _ = cv2.findHomography(pts1, pts2, cv2.RANSAC)
+
     transformed = cv2.warpPerspective(dewarped, Transform_matrix,
                                       (int(x_dist), int(y_dist)))
     return transformed
-
 
   
 def get_largest_contour(image):
@@ -510,11 +835,11 @@ def get_largest_contour(image):
     Takes the homography image and finds the largest contour as the mask 
     
     Args:
-    image (array) homographied image
+        image (array) homographied image
     
     Returns:
-    largest_contour (array): array with lagest contour area
-    binary (array): array of image in binary with the larges contour as 1 values
+        largest_contour (array): array with lagest contour area
+        binary (array): array of image in binary with the larges contour as 1 values
     """
 
     # Convert to grayscale
@@ -539,10 +864,10 @@ def get_mask_from_largest_contour(image, margin=10):
     WARNING: If the image is mainly river and the river has lots of sun spots it will not give a good mask for the whole mask
     
     Args:
-    image (array): homographied image for masking
+        image (array): homographied image for masking
     
     Returns: 
-    inner_mask (arrry) final mask generated automatically
+        inner_mask (arrry) final mask generated automatically
     
     """
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
@@ -601,9 +926,38 @@ def start_imu_thread():
     Returns:
         None: This function does not return any value.
     """
-    imu_thread = threading.Thread(target=imu_reader_thread)
-    imu_thread.daemon = True
-    imu_thread.start()
+    global imu, imu_connected, imu_started
+
+    if imu_started:
+        return imu_connected  # already attempted
+
+    imu_started = True  # mark that we tried starting
+
+    try:
+        address = 0x68
+        bus = smbus.SMBus(1)
+        imu = MPU9250.MPU9250(bus, address)
+        imu.begin()
+        # Optional calib, ignore if missing
+        try:
+            imu.loadCalibDataFromFile(os.path.join(BASE_DIR, "IMU/calib.json"))
+        except Exception:
+            pass
+
+        # Start the thread
+        imu_thread = threading.Thread(target=imu_reader_thread)
+        imu_thread.daemon = True
+        imu_thread.start()
+
+        imu_connected = True
+        print("IMU thread started successfully.")
+    except Exception as e:
+        imu_started = False
+        imu_connected = False
+        imu = None
+        print("IMU not connected:", e)
+
+    return imu_connected
 
 
 def read_last_config():
@@ -978,11 +1332,16 @@ def sort_key(name: str):
 
 def checks():
     """
-    Checks if the mask and image sizes match, and if not, provides relevant error messages.
+    Checks:
+      1) If mask and transformed image sizes match.
+      2) If interrogation areas fit within the transformed image.
 
     Returns:
-        str: A message indicating whether the mask and image are compatible or not.
+        str or list: A message or list of messages for any issues,
+                     otherwise "True".
     """
+    errors = []  # collect all issues
+    print('IN CHECKS')
     global video_handler
     try:
         frame = video_handler.get_frame()
@@ -990,24 +1349,63 @@ def checks():
         video_handler = VideoStreamHandler()
         frame = video_handler.get_frame()
 
+    # Get transformed image
     image = transformed(frame)
+    h, w = image.shape[:2]
+
+    # Load config
     with open(MAIN_CONFIG, 'r') as cf:
         config = json.load(cf)
 
-    try:
-        mask_path = config.get('mask_path')
+    
+    # 1. Check Mask Compatibility 
+    
+    mask = None
+    mask_path = config.get('mask_path')
+    if mask_path:
         full_path = os.path.join(BASE_DIR, 'app', mask_path)
         mask = cv2.imread(full_path)
-    except:
-        if config.get('mask') == 'yes':
-            return 'No mask was found and Mask = yes, either go back and Create a mask or change Mask in PIV PARAMETERS to NO'
-        else:
-            return 'True'
 
-    if mask.shape == image.shape:
-        return 'True'
-    else:
-        return 'Mask shape does not match transformed image shape, please redo mask'
+    if mask is None and config.get('mask') == 'yes':
+        errors.append("No mask was found and Mask = yes. Either go back and create a mask or change Mask in PIV PARAMETERS to NO.")
+    elif mask is not None and mask.shape != image.shape:
+        print('mask error')
+        errors.append("Mask shape does not match transformed image shape. Make sure you hit SAVE MASK PATH or redo mask.")
+
+    
+    # 2. Check Interrogation Area Size (PIV) 
+    
+    try:
+        idealresolution = float(config.get('idealresolution'))
+        pixSize = float(config.get('pixSize'))
+        passes = int(config.get('passes', 1))  # default to 1 if not set
+
+        # Calculate real resolution
+        real_res = np.ceil(idealresolution / pixSize) * 2 * 2**(passes - 1)
+
+        # Compute interrogation areas for each pass
+        int_areas = [real_res / (2**i) for i in range(passes)]
+        print(f'INT_AREAS, {int_areas}')
+        # Check if any interrogation area exceeds image size
+        for IA in int_areas:
+            if IA >= h or IA >= w:
+                print('INT AREAS errors.')
+                errors.append("Interrogation area too large for image size. Please make the trapezoid bigger or make the output vector spacing smaller.")
+                break  # only need to report once
+
+    except Exception as e:
+        # silently ignore missing or invalid PIV values
+        print("PIV check skipped:", e)
+
+    
+    # Return results
+    
+    if errors:
+        # ensure all errors are strings
+        errors = [str(e) for e in errors]
+        print(errors)
+        return errors
+    return "True"
 
 
 def update_camera_parameters(config):
@@ -1038,7 +1436,8 @@ def update_camera_parameters(config):
         print('video never started')
         
     video_handler=VideoStreamHandler()
-    
+
+   
 def update_save_json(test_size):
     """Update save.json with TEST_SIZE while keeping existing data."""
     if os.path.exists(SAVE_CONFIG):
@@ -1053,11 +1452,30 @@ def update_save_json(test_size):
     # Write the updated data back to save.json
     with open(SAVE_CONFIG, "w") as f:
         json.dump(data, f, indent=4)
+
+
+def filter_log_content(all_lines, startup_identifier):
+    """
+    Filters logs to the most recent run.
+
+    Args:
+        all_lines (list): A list of all the lines in the current log.
+        startup_identifier (string): A string of the uniquie start lines for each log type
+
+    Returns:
+        None: This function does not return a value but updates global camera parameters.
+    """
+    try:
+        last_startup_index = max(idx for idx, line in enumerate(all_lines)
+                                 if startup_identifier in line)
+        return all_lines[last_startup_index + 1:]
+    except ValueError:
+        return all_lines
+
     
 """
 Below are all the app and webpage logic. For most there should be a corresponding .html in the templates file that the user will view
 """
-
 
 @app.after_request
 def apply_cors(response: Response):
@@ -1083,6 +1501,18 @@ def check_process():
     is_process_running()
 
 
+@app.before_request
+def check_imu_connection():
+    """
+    Check if IMU is connected before handling any request.
+    Sets g.imu_connected = True/False so templates can access it.
+    """
+    global imu_connected, imu_started, imu
+
+    # Set template-level flag
+    g.imu_connected = imu_connected
+  
+    
 @login_manager.user_loader
 def load_user(username: str):
     """
@@ -1101,7 +1531,19 @@ def index() -> Response:
     This is the default route that renders the login page of the captive portal.
 
     """
-    return render_template('login.html')
+    global video_handler, imu_connected
+    camera_error = None   
+    try:
+        if video_handler is None:
+            cap = cv2.VideoCapture(2)
+            if not cap.isOpened():
+                raise RuntimeError("Camera not available")
+            cap.release()
+    except Exception as e:
+        camera_error = "Camera not connected. Please check the connection. Once connected RESTART SPEC"
+        
+    return render_template('login.html',
+                           camera_error=camera_error)
 
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -1114,6 +1556,7 @@ def login() -> Response:
     PIV options; otherwise, they are redirected to the calibration splash page.
 
     """
+    
     if request.method == 'POST':
         username = request.form.get('username')
         password = request.form.get('password')
@@ -1314,7 +1757,6 @@ def get_runs():
         return jsonify({"error": "Configuration not found."}), 404
 
 
-
 @app.route('/results/graph_data', methods=['GET'])
 @login_required
 def graph_data():
@@ -1441,18 +1883,53 @@ def live_feed():
     return render_template('live_feed.html')
 
 
+@app.route('/set_height', methods=["POST"])
+@login_required
+def set_height():
+    """
+    Sets the CAMERA_HEIGHT variable from user input on trapezoid pages
+    """
+    global CAMERA_HEIGHT
+
+    value = float(request.form.get("height_value"))
+    unit = request.form.get("height_unit")
+    next_page = request.form.get("next_page", "calibrate_trapezoid")  # default
+
+    # Convert feet to meters
+    CAMERA_HEIGHT = value * 0.3048 if unit == "ft" else value
+
+    print("Camera height set:", CAMERA_HEIGHT, "meters")
+
+    return redirect(url_for(next_page, camera_height=CAMERA_HEIGHT, height_unit='m'))
+
+
 @app.route('/process_trapezoid')
 @login_required
 def process_trapezoid():
     """
     The trapezoid live video process runs through this and is displayed on the trapezoid page
     """
-
     def generate_frames():
         global current_points, imu_angle
-        global video_handler
+        global video_handler, CAMERA_HEIGHT
 
         while True:
+
+            if CAMERA_HEIGHT is None:
+                blank = np.zeros((1080, 1920, 3), dtype=np.uint8)
+                cv2.putText(blank,
+                            "Please enter camera height above water",
+                            (50, 350),
+                            cv2.FONT_HERSHEY_SIMPLEX,
+                            1.2,
+                            (0, 0, 255),
+                            3)
+                _, jpeg = cv2.imencode('.jpg', blank)
+                yield (b'--frame\r\n'
+                    b'Content-Type: image/jpeg\r\n\r\n' + jpeg.tobytes() +
+                    b'\r\n')
+                continue
+        
             try:
                 frame = video_handler.get_frame()
             except:
@@ -1461,12 +1938,9 @@ def process_trapezoid():
                     frame = video_handler.get_frame()
                 except:
                     print('something is wrong')
+            # cv2.imwrite('/home/spec/spec/regular_frame.png',frame)
             dewarped_frame = dewarp_frame(frame)
-
-            if current_points == None:
-                current_points = find_largest_trapezoid(angle=imu_angle)
-
-            get_trapezoid(imu_angle)
+            draw_trapezoid(CAMERA_HEIGHT)
 
             if current_points is not None:
                 cv2.polylines(dewarped_frame, [
@@ -1474,7 +1948,7 @@ def process_trapezoid():
                 ],
                               isClosed=True,
                               color=(0, 255, 0),
-                              thickness=15)
+                              thickness=5)
 
                 _, jpeg = cv2.imencode('.jpg', dewarped_frame)
                 yield (b'--frame\r\n'
@@ -1484,36 +1958,96 @@ def process_trapezoid():
     return Response(generate_frames(),
                     mimetype='multipart/x-mixed-replace; boundary=frame')
 
+@app.route('/get_trapezoid_limits')
+@login_required
+def get_trapezoid_limits():
+    return jsonify({
+        "top": {
+            "min": MIN_TOP_ALLOWED,
+            "max": MAX_TOP_ALLOWED
+        },
+        "bottom": {
+            "min": MIN_BOTTOM_ALLOWED,
+            "max": MAX_BOTTOM_ALLOWED
+        }
+    })
+
+@app.route('/get_current_trapezoid')
+@login_required
+def get_current_trapezoid():
+    """
+    Send trapezoid information to the front end to block sliders from sending the trapezoid out of frame.
+    """
+    global top_shift, bottom_shift, width_scale, world_x_shift
+    global MIN_TOP_ALLOWED, MAX_TOP_ALLOWED, MIN_BOTTOM_ALLOWED, MAX_BOTTOM_ALLOWED, MIN_WIDTH_ALLOWED, MAX_WIDTH_ALLOWED
+    global current_points
+
+    # Compute safe x_shift range by probing
+    def probe_x_limit(current, direction):
+        step = 0.01
+        value = current
+        for _ in range(80):
+            candidate = value + direction*step
+            if not is_valid_geometry(top_shift, bottom_shift, width_scale, candidate, CAMERA_HEIGHT):
+                break
+            value = candidate
+        return value
+
+    min_x_allowed = probe_x_limit(world_x_shift, -1)
+    max_x_allowed = probe_x_limit(world_x_shift, +1)
+    
+    return jsonify({
+        "top_shift": float(top_shift),
+        "bottom_shift": float(bottom_shift),
+        "x_shift": float(world_x_shift),
+        "width_scale": float(width_scale),
+        "min_top": float(MIN_TOP_ALLOWED),
+        "max_top": float(MAX_TOP_ALLOWED),
+        "min_bottom": float(MIN_BOTTOM_ALLOWED),
+        "max_bottom": float(MAX_BOTTOM_ALLOWED),
+        "min_width": MIN_WIDTH_ALLOWED,
+        "max_width": MAX_WIDTH_ALLOWED,
+        "min_x": float(min_x_allowed),   # new
+        "max_x": float(max_x_allowed),   # new
+    })
 
 @app.route('/slide_point', methods=['POST'])
-@login_required
 def slide_point():
     """
-    The logic for moving the trapezoid on the trapezoid points with sliders
+    Update trapezoid world-space parameters based on slider input
     """
-    global current_points, imu_angle
+    global top_shift, bottom_shift, width_scale, world_x_shift, CAMERA_HEIGHT, MIN_WIDTH_ALLOWED, MAX_WIDTH_ALLOWED
+
     point = request.args.get('point')
-    value = request.args.get('value')
+    value = float(request.args.get('value'))
 
-    print(f"Attempting to move {point} {value}")
+    # slider sensitivity: roughly constant regardless of camera height
+    slider_sensitivity = 0.002 
 
-    if current_points is not None:
-        if point == 'top_left_y':
-            current_points[1][1] = int(value)
-        elif point == 'top_left_x':
-            current_points[1][0] = int(value)
-        elif point == 'bottom_left_y':
-            current_points[2][1] = int(value)
-        elif point == 'top_right_x':
-            current_points[0][0] = int(value)
-        elif point == 'bottom_left_y':
-            current_points[2][1] = int(value)
+    if point == 'top_shift':
+        top_shift = (value - 2500) * slider_sensitivity
+        # Ensure a minimum separation from bottom
+        if top_shift > bottom_shift - 0.01:
+            top_shift = bottom_shift - 0.01
+    elif point == 'bottom_shift':
+        bottom_shift = (value - 2500) * slider_sensitivity
+        # Ensure bottom > top
+        if bottom_shift < top_shift + 0.01:
+            bottom_shift = top_shift + 0.01
+    elif point == 'x_shift':
+        world_x_shift = (value - 2500) * slider_sensitivity
+    elif point == 'width_scale':
+        proposed = 0.1 + (value / 5000.0) * (8.0 - 0.1)
+        if is_valid_geometry(top_shift, bottom_shift, proposed, world_x_shift, CAMERA_HEIGHT):
+            width_scale = proposed
+    # Redraw trapezoid using current parameters
+    draw_trapezoid(CAMERA_HEIGHT)
 
-        get_trapezoid(imu_angle)
-    else:
-        print("current_points is None")
     return jsonify({"status": "OK"})
 
+def debug_log(msg):
+    with open("/home/spec/spec/debug_log.txt", "a") as f:
+        f.write(f"{datetime.now().isoformat()}  {msg}\n")
 
 @app.route('/save_points', methods=['POST'])
 @login_required
@@ -1521,17 +2055,28 @@ def save_points():
     """
     Saves the current trapezoid points to the config file when user selects save buttom
     """
-    global MAIN_CONFIG
+    global MAIN_CONFIG,current_points, top_shift, bottom_shift, width_scale, world_x_shift, CAMERA_HEIGHT
     try:
         try:
             with open(MAIN_CONFIG, 'r') as f:
                 config = json.load(f)
         except Exception as e:
             config = {}
-        config['trapezoid_points'] = [point for point in current_points]
+        try:
+            pix_size = config['reduced_res_camera_pixel_size']
+            focal_length = config['focal_length']
+        except:
+            pix_size = 1
+            focal_length = 1
+        config['trapezoid_points'] = np.array(current_points).tolist()
+        config['top_shift'] = float(top_shift)
+        config['bottom_shift'] = float(bottom_shift)
+        config['width_scale'] = float(width_scale)
+        config['world_x_shift'] = float(world_x_shift)
+        config['sensor_height'] = float(CAMERA_HEIGHT)
+        config['pixSize'] = float(f'{(CAMERA_HEIGHT * float(pix_size))/float(focal_length):.2g}')
         with open(MAIN_CONFIG, 'w') as f:
             json.dump(config, f, indent=4)
-
         return 'Points saved successfully!', 200
     except Exception as e:
         return str(e), 500
@@ -1543,7 +2088,7 @@ def transformed_image():
     """
     Creates a transformed image with the current trapezoid points
     """
-    global video_handler
+    global video_handler, current_points
     try:
         frame = video_handler.get_frame()
     except:
@@ -1552,8 +2097,9 @@ def transformed_image():
     if frame is None:
         return jsonify({'error': 'Unable to capture frame from video stream'
                        }), 500
-
+ 
     transformed_frame = transformed(frame, current_points)
+ 
     transformed_path = os.path.join(BASE_DIR,
                                     'app/static/mask/captured_frame.jpg')
     cv2.imwrite(transformed_path, transformed_frame)
@@ -1947,8 +2493,25 @@ def run_script():
     """
     Redirects users to the waiting html
     """
-
+            
     return render_template('waiting.html')
+
+
+@app.route('/check_before_test')
+@login_required
+def check_before_test():
+    """
+    Runs all checks and returns JSON with any errors.
+    """
+    check_result = checks()
+
+    if check_result == "True":
+        return jsonify({"status": "ok"})
+    else:
+        if isinstance(check_result, list):
+            return jsonify({"status": "error", "messages": check_result})
+        else:
+            return jsonify({"status": "error", "messages": [check_result]})
 
 
 @app.route('/run_test_script')
@@ -1958,11 +2521,6 @@ def run_test_script():
     Stops the video (so gstreamer does not freak out with multiple scripts trying to access it) and runs the test script for a 5 second test
     the user is then redirect to the results page to view the results
     """
-    check_result = checks()
-
-
-    if check_result != "True":
-        return redirect(url_for('splash', error=check_result))
     global video_handler
 
     try:
@@ -2097,26 +2655,13 @@ def handle_test_files():
     """
     action = request.args.get('action')
 
-    # test_dirs = sorted([d for d in os.listdir(SAVE_FOLDER_PATH) if 'test' in d],
-    #                    reverse=True)
-
-    # if not test_dirs:
-    #     return jsonify({"message": "No test files found."})
-
-    # most_recent_test = test_dirs[0]
-    # most_recent_path = os.path.join(SAVE_FOLDER_PATH, most_recent_test)
     global TEST_SIZE
     test_dirs = sorted([d for d in os.listdir(SAVE_FOLDER_PATH) if 'test' in d],
                        reverse=True)
     total_space = shutil.disk_usage("/").free
     free_gb = total_space / (1024**3)
     print(f"Total free disk space: {total_space} bytes")
-    # file_size = 0
 
-
-    # for dirpath, dirnames, filenames in os.walk(most_recent_path):
-    #     for f in filenames:
-    #         file_size += os.path.getsize(os.path.join(dirpath, f))
     with open(MAIN_CONFIG, 'r') as cf:
         config = json.load(cf)
     try:
@@ -2226,6 +2771,7 @@ def save_to_usb():
     response = mount_and_save_data(save_dir, "/media/usb")
     return response
 
+
 @app.route('/save_success')
 @login_required
 def save_success():
@@ -2241,6 +2787,7 @@ def save_success():
         dir_list=dir_list,
         new_directory=new_directory
     )
+
 
 @app.route('/logs')
 @login_required
@@ -2297,15 +2844,6 @@ def view_logs(log_type):
     return '\n'.join(log_content)
 
 
-def filter_log_content(all_lines, startup_identifier):
-    try:
-        last_startup_index = max(idx for idx, line in enumerate(all_lines)
-                                 if startup_identifier in line)
-        return all_lines[last_startup_index + 1:]
-    except ValueError:
-        return all_lines
-
-
 @app.route('/logout')
 @login_required
 def logout():
@@ -2325,6 +2863,34 @@ def get_current_points():
     return jsonify(current_points)
 
 
+@app.route('/get_trapezoid_params')
+@login_required
+def get_trapezoid_params():
+    global top_shift, bottom_shift, width_scale, world_x_shift, CAMERA_HEIGHT, dy_dbottom, dy_dtop
+    try:
+        with open(MAIN_CONFIG, 'r') as cf:
+            config = json.load(cf)
+        top_shift = config['top_shift']
+        bottom_shift = config['bottom_shift']
+        width_scale = config['width_scale']
+        world_x_shift = config['world_x_shift']
+        CAMERA_HEIGHT=config['sensor_height']
+    except:
+        print('Using defaults')
+    return jsonify({
+        "top_shift": top_shift,
+        "bottom_shift": bottom_shift,
+        "x_shift": world_x_shift,
+        "width_scale": width_scale,
+        "min_top": MIN_TOP_ALLOWED,
+        "max_top": MAX_TOP_ALLOWED,
+        "min_bottom": MIN_BOTTOM_ALLOWED,
+        "max_bottom": MAX_BOTTOM_ALLOWED,
+        "dy_dtop": float(dy_dtop),
+        "dy_dbottom": float(dy_dbottom)
+    })
+   
+    
 @app.route('/bubble_level_2')
 # @login_required
 def bubble_level_2():
@@ -2350,11 +2916,23 @@ def read_IMU_for_level():
 @login_required
 def calibrate_reset_trapezoid():
     """
-    Resets the trapezoid to the largest possible one
+    Resets the trapezoid to the starting one
     """
-    global current_points
-    current_points = None
-    process_trapezoid()
+    global top_shift, bottom_shift, width_scale, world_x_shift, CAMERA_HEIGHT, MIN_HEIGHT
+    # Default "centered" values
+    # top_shift = 0.0
+    # bottom_shift = 0.0
+    # Default trapezoid geometry
+    center_y = 0.0
+    half_height = max(0.1, MIN_HEIGHT / 2)  # ensure valid size
+
+    top_shift = center_y - half_height
+    bottom_shift = center_y + half_height
+    world_x_shift = 0.0
+    width_scale = 1.0 
+
+    # Redraw trapezoid with current CAMERA_HEIGHT
+    draw_trapezoid(CAMERA_HEIGHT)
     return render_template('calibrate_trapezoid.html')
 
 
@@ -2362,11 +2940,17 @@ def calibrate_reset_trapezoid():
 @login_required
 def reset_trapezoid():
     """
-    Resets the trapezoid to the largest possible one
+    Resets the trapezoid to the starting one
     """
-    global current_points
-    current_points = None
-    process_trapezoid()
+    global top_shift, bottom_shift, width_scale, world_x_shift, CAMERA_HEIGHT
+    # Default "centered" values
+    top_shift = 0.0
+    bottom_shift = 0.0
+    world_x_shift = 0.0
+    width_scale = 1.0 
+
+    # Redraw trapezoid with current CAMERA_HEIGHT
+    draw_trapezoid(CAMERA_HEIGHT)
     return render_template('trapezoid.html')
 
 
@@ -2536,21 +3120,20 @@ def get_disk_space():
         save_conf = json.load(sc)
     current_dir = save_conf['current_data_directory']
     if os.path.exists(current_dir):
-        mp4_files = [f for f in os.listdir(current_dir) if f.endswith('.mp4')]
+        avi_files = [f for f in os.listdir(current_dir) if f.endswith('.avi')]
         run_out_date_str = None
     else:
         run_out_date_str = "Cannot Calculate no recent data runs"
-        mp4_files = None
+        avi_files = None
     file_size = 0
-    print(current_dir)
-    if mp4_files:
+    # print(current_dir)
+    if avi_files:
         for dirpath, dirnames, filenames in os.walk(current_dir):
             for f in filenames:
                 file_size += os.path.getsize(os.path.join(dirpath, f))
     else:
         if not run_out_date_str:
             run_out_date_str = "PIV running cannot calculate size of files."
-    print(file_size)
 
     with open(MAIN_CONFIG, 'r') as cf:
         config = json.load(cf)
@@ -2597,6 +3180,7 @@ def usb_saving():
     '''
     return render_template('waiting_save_to_usb.html')
 
+
 @app.route('/unmount_USB', methods=['GET'])
 def unmount_USB():
     """
@@ -2627,6 +3211,7 @@ def unmount_USB():
     
   
     return redirect(request.referrer or url_for('splash'))  
+
 
 if __name__ == "__main__":
     #start imu thread then the app

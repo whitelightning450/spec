@@ -139,7 +139,12 @@
     {% if g.process_running %}
         <div class="banner">PIV Process is running</div>
     {% endif %}
-
+    {% if not g.imu_connected %}
+        <div class="alert text-center fw-bold"
+            style="background-color:#cc0000; color:white; font-size:1.2rem; border:none;">
+            IMU not connected. Please check and RESTART device.
+        </div>
+    {% endif %}
     <h1 class="highlighted-title">Masking Result</h1>
 
     <div class="image-container">
@@ -157,11 +162,21 @@
             <img src="{{ masked_image }}" alt="Masked Image">
         </div>
     </div>
+    <div id="errorActions" style="display:none; margin-top:15px;">
+        <div class=button-container></div>
+            <button onclick="location.href='/calibrate_trapezoid'">
+                Go to Trapezoid Calibration
+            </button>
+            <button onclick="location.href='/calibrate_piv_parameters'">
+                Go to PIV Parameters
+            </button>
+        </div>
+    </div>
 
     <div class=button-container>
         <button id="saveMaskPathButton">Save Mask</button>
         <button onclick="location.href='/calibrate_masking_options'">Reset Mask</button>
-        <button onclick="location.href='/test'">Run Test</button>
+        <button id="runTestButton">Run Test</button>
         <button onclick="location.href='/calibrate_splash'" type="button">Calibration Main Menu</button>
     </div>
 <!--</div>--> <!--end of container-->
@@ -181,6 +196,34 @@
                     alert('Failed to save mask path.');
                 }
             });
+        };
+        // Check if there's an error message in the URL and decode it
+        const urlParams = new URLSearchParams(window.location.search);
+        const errorMessage = urlParams.get('error');
+        if (errorMessage) {
+            alert(decodeURIComponent(errorMessage));  // Display the decoded error message in a pop-up
+        }
+        document.getElementById("runTestButton").onclick = function() {
+
+            fetch("/check_before_test")
+            .then(response => response.json())
+            .then(data => {
+
+                if (data.status === "ok") {
+                    window.location.href = "/test";
+                } else {
+                    alert(data.messages.join("\n"));
+
+                    // Show fix buttons
+                    document.getElementById("errorActions").style.display = "block";
+                }
+
+            })
+            .catch(err => {
+                alert("Error running checks.");
+                console.error(err);
+            });
+
         };
     </script>
 </body>

@@ -13,7 +13,7 @@ folder_name = "images_for_calibration"
 os.makedirs(folder_name, exist_ok=True)
 
 # Initialize the camera
-camera = cv2.VideoCapture(2)  # 2 is a gstreamer virtual camera
+camera = cv2.VideoCapture(3)  # 2 is a gstreamer virtual camera
 
 if not camera.isOpened():
     print("Error: Could not open the camera. Make sure gstreamer is running with 'sudo systemctl status gstreamer.service'")

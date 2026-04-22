@@ -105,7 +105,7 @@ def compute_subsets(image1, int_area, step):
     LAx = minix
     LUy = image1.shape[0] - maxiy
     LUx = image1.shape[1] - maxix
-    shift4centery = int(round((LUy - LAy) / 2))
+    shift4centery = int(np.ceil((LUy - LAy) / 2)) #np.ciel
     shift4centerx = int(round((LUx - LAx) / 2))
 
     # shift4center will be negative if in the unshifted case the left border is bigger than the right border.
@@ -341,8 +341,8 @@ def ensemble_piv(stack, piv_params, BASE_DIR):
     in_mask = mask.flatten(order='F')[ss1int.flatten(order='F') - 1].reshape(
         ss1int.shape, order='F')
 
-    if np.all(in_mask == 0):
-        in_mask = np.ones_like(in_mask)
+    # if np.all(in_mask == 0):
+    #     in_mask = np.ones_like(in_mask)
 
     # Batch images
     batch_number = 0
@@ -350,9 +350,8 @@ def ensemble_piv(stack, piv_params, BASE_DIR):
 
     # Log to webpage
     with open(f'{BASE_DIR}/script.log', 'a') as log:
-        timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
         log.write(
-            f'[{timestamp}] {len(batches)} batches of 50 images will be run through FFT process\n'
+            f'{len(batches)} batches of 50 images will be run through FFT process\n'
         )
 
     # Loop through batches
@@ -368,8 +367,7 @@ def ensemble_piv(stack, piv_params, BASE_DIR):
 
         # Log batch number to webpage
         with open(f'{BASE_DIR}/script.log', 'a') as log:
-            timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
-            log.write(f'[{timestamp}] Running batch {batch_number} of {len(batches)}\n')
+            log.write(f'Running batch {batch_number} of {len(batches)}\n')
         prealoaded_time = time.time()
         preloaded_images = preload_batch(batch)
 
@@ -402,9 +400,8 @@ def ensemble_piv(stack, piv_params, BASE_DIR):
 
         # Log to webpage
         with open(f'{BASE_DIR}/script.log', 'a') as log:
-            timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
             log.write(
-                f'[{timestamp}] Adding results from batch {batch_number} to total results\n')
+                f'Adding results from batch {batch_number} to total results\n')
 
         # Aggregate results from the result queue
         while not result_queue.empty():
@@ -436,8 +433,7 @@ def ensemble_piv(stack, piv_params, BASE_DIR):
 
     # Log to webpage
     with open(f'{BASE_DIR}/script.log', 'a') as log:
-        timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
-        log.write(f'[{timestamp}] Finished FFT process for all image batches\n')
+        log.write(f'Finished FFT process for all image batches\n')
 
     # Find peaks
     pst = time.time()
@@ -458,8 +454,7 @@ def ensemble_piv(stack, piv_params, BASE_DIR):
 
     # Log to webpage
     with open(f'{BASE_DIR}/script.log', 'a') as log:
-        timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
-        log.write(f'[{timestamp}] Post Processing!\n')
+        log.write(f'Post Processing!\n')
 
     post = time.time()
     u_piv, v_piv = post_proc(u_piv, v_piv, piv_params, BASE_DIR)
@@ -529,11 +524,9 @@ def ensemble_piv(stack, piv_params, BASE_DIR):
 
     # Log to webpage
     with open(f'{BASE_DIR}/script.log', 'a') as log:
-        timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
-        log.write(f'[{timestamp}] Ensemble PIV completed in {runTime:.2f} s\n')
+        log.write(f'Ensemble PIV completed in {runTime:.2f} s\n')
 
     # Log to spec_app.log
-    timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
-    print(f"[{timestamp}] Ensemble PIV completed in {runTime:.2f} s")
+    print(f"Ensemble PIV completed in {runTime:.2f} s")
 
     return x_piv, y_piv, u_piv_out, v_piv_out, corr_map

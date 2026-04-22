@@ -35,19 +35,15 @@ run_gst_launch() {
         # Clear any existing frames before starting
         rm -f ${PARENT_DIR}/raw_frames/*
         # Clear any existing video output
-        rm -f "${PARENT_DIR}/save_data/video_output.mp4"
+        rm -f "${PARENT_DIR}/save_data/video_output.avi"
 
         # Start gst-launch in background
-        gst-launch-1.0 -e -m -f v4l2src device=/dev/video3 ! \
-            video/x-raw,format=YUY2,width=${width},height=${height},framerate=30/1 ! \
-            tee name=t \
-            t. ! queue max-size-buffers=2 leaky=downstream ! videoconvert ! \
-                x264enc bitrate=5000 speed-preset=ultrafast tune=zerolatency ! \
-                mp4mux streamable=true fragment-duration=1 ! \
-                filesink location=${PARENT_DIR}/save_data/video_output.mp4 sync=false \
-            t. ! queue max-size-buffers=2 leaky=downstream ! videoconvert ! videorate ! \
-                video/x-raw,framerate=${framerate}/1 ! jpegenc ! \
-                multifilesink async=false sync=false max-lateness=0 qos=false location=${PARENT_DIR}/raw_frames/frame%05d.jpg &
+        gst-launch-1.0 -e -m -f \
+            v4l2src device=/dev/video3 ! image/jpeg, width=${width}, height=${height}, framerate=30/1 ! tee name=t \
+            \
+            t. ! queue ! avimux ! filesink location=${PARENT_DIR}/save_data/video_output.avi sync=false \
+            \
+            t. ! queue ! jpegdec ! videorate ! video/x-raw,format=I420,framerate=${framerate}/1 ! jpegenc ! multifilesink location=${PARENT_DIR}/raw_frames/frame%05d.jpg &
 
         pid=$!
         echo "gst-launch started with PID: $pid"
@@ -100,9 +96,9 @@ run_gst_launch() {
             echo "Frame capture completed successfully on attempt $attempt"
             echo "Got $final_count frames (within ±$tolerance of target $expected_frames)"
 
-            # Verify MP4 file exists and has size greater than 0
-            if [ -f "${PARENT_DIR}/save_data/video_output.mp4" ] && \
-               [ -s "${PARENT_DIR}/save_data/video_output.mp4" ]; then
+            # Verify AVI file exists and has size greater than 0
+            if [ -f "${PARENT_DIR}/save_data/video_output.avi" ] && \
+               [ -s "${PARENT_DIR}/save_data/video_output.avi" ]; then
 
                 # If we have extra frames, remove them
                 if [ "$final_count" -gt "$expected_frames" ]; then
@@ -127,7 +123,7 @@ run_gst_launch() {
                     success=true
                 fi
             else
-                echo "MP4 file is missing or empty, retrying..."
+                echo "AVI file is missing or empty, retrying..."
                 ((attempt++))
             fi
         else
@@ -222,5 +218,90 @@ enable_rtc_charging() {
             echo "Charging is already enabled"
         fi
         return 0
+    fi
+}
+
+check_darkness() {
+  threshold=25
+  total_frames=5
+  required_dark=4
+  dark_count=0
+
+  echo "Checking $total_frames consecutive frames for darkness..."
+
+  for i in $(seq 1 $total_frames); do
+    tmp_img="/tmp/dark_check_$$_$i.jpg"
+
+    # Capture single frame using working camera caps
+    gst-launch-1.0 -q -v \
+      v4l2src device=/dev/video3 num-buffers=1 ! \
+      image/jpeg, width=${width}, height=${height}, framerate=30/1 ! \
+      jpegdec ! videoconvert ! jpegenc ! filesink location=$tmp_img
+
+    # If capture failed, treat as not dark (safe)
+    if [ ! -f "$tmp_img" ]; then
+      echo "Frame $i capture failed — assuming light present."
+      return 1
+    fi
+
+    # Calculate brightness (still using convert, optional replacement later)
+    brightness=$(convert "$tmp_img" -colorspace Gray -format "%[fx:mean*255]" info:)
+    brightness_int=$(printf "%.0f" "$brightness")
+    echo "Frame $i brightness: $brightness_int"
+
+    # Delete immediately
+    rm -f "$tmp_img"
+
+    if [ "$brightness_int" -lt "$threshold" ]; then
+      dark_count=$((dark_count + 1))
+    fi
+
+    sleep 0.5
+  done
+
+  echo "Dark frames: $dark_count / $total_frames"
+
+  if [ "$dark_count" -ge "$required_dark" ]; then
+    echo "Darkness confirmed (>= $required_dark frames)."
+    return 0   # DARK
+  else
+    echo "Light detected."
+    return 1   # NOT DARK
+  fi
+}
+
+check_piv_output_data() {
+
+    if ! command -v jq &> /dev/null; then
+        echo "[WARN] jq not installed. Cannot check PIV data."
+        return
+    fi
+
+    if [ ! -f "$SAVE_JSON" ]; then
+        echo "[WARN] save.json not found."
+        return
+    fi
+
+    CURRENT_DATA_DIR=$(jq -r '.current_data_directory' "$SAVE_JSON")
+
+    if [ -z "$CURRENT_DATA_DIR" ] || [ "$CURRENT_DATA_DIR" = "null" ] || [ ! -d "$CURRENT_DATA_DIR" ]; then
+        echo "[WARN] current_data_directory invalid or does not exist: $CURRENT_DATA_DIR"
+        return
+    fi
+
+    # Find folder containing PIV_output in its name
+    PIV_FOLDER=$(find "$CURRENT_DATA_DIR" -maxdepth 1 -type d -name "*PIV_output*" | head -n 1)
+
+    if [ -z "$PIV_FOLDER" ]; then
+        echo "[WARN] NO DATA in $CURRENT_DATA_DIR (No PIV_output folder found)"
+        return
+    fi
+
+    CSV_COUNT=$(find "$PIV_FOLDER" -maxdepth 1 -type f -name "*.csv" | wc -l)
+
+    if [ "$CSV_COUNT" -eq 6 ]; then
+        echo "[INFO] PIV data verified in $PIV_FOLDER (6 CSV files present)"
+    else
+        echo "[WARN] NO DATA in $CURRENT_DATA_DIR (Found $CSV_COUNT CSV files)"
     fi
 }

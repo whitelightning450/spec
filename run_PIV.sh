@@ -23,6 +23,8 @@ IMU_script="sudo python3 ${PARENT_DIR}/IMU/run_imu.py --unique-tag=IMUProcess"
 # Path to your config.json file
 CONFIG_FILE="${PARENT_DIR}/config.json"
 LOG_FILE="${PARENT_DIR}/script.log"
+PARENT_DIR='/home/spec/spec'
+SAVE_JSON="${PARENT_DIR}/save.json"
 echo 'PIV SCRIPT STARTED'
 
 
@@ -56,6 +58,18 @@ while true; do
         exit 1
       fi
 
+      echo "Checking for darkness before running IMU..."
+
+      while true; do
+        if check_darkness; then
+          echo "It is dark. Sleeping for ${site_piv_break} minutes..."
+          sleep $((site_piv_break * 60))
+        else
+          echo "Light detected. Proceeding..."
+          break
+        fi
+      done
+
       # Run IMU
       echo "Running IMU command"
       $IMU_script &
@@ -85,6 +99,7 @@ while true; do
       fi
 
       cleanup
+      
 
       # Process images
       python3 ${PARENT_DIR}/PIV/preprocess_frames.py
@@ -92,6 +107,7 @@ while true; do
       rm -f ${PARENT_DIR}/images/*
       rm -f ${PARENT_DIR}/raw_frames/*
       > "$LOG_FILE"
+      check_piv_output_data
       # Calculate next scheduled run
       current_time=$(date +%s)
       next_run_time=$(( (current_time / (site_piv_break * 60) + 1) * (site_piv_break * 60) ))

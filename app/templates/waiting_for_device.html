@@ -4,7 +4,85 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Waiting for Device</title>
+    <title>Waiting for Device to Stop PIV</title>
+    <style>
+        @font-face {
+            font-family: 'Bebas Neue';
+            src: url('{{ url_for("static", filename="font/BebasNeue-Regular.ttf") }}') format('truetype');
+            font-weight: normal;
+            font-style: normal;
+        }
+        body {
+            font-family: 'Bebas Neue', Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            padding: 0;
+            background-color: #f0f0f0;
+            background-image: url("{{ url_for('static', filename='images/app_bg.jpg') }}");
+            background-size: cover;
+            background-attachment: fixed;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        #log-container {
+            font-size: 18px;
+            color: #333;
+            margin-top: 20px;
+            text-align: left;
+            background-color: rgba(255, 255, 255, 0.9);
+            padding: 15px;
+            border-radius: 8px;
+            width: 90%;
+            max-width: 800px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
+            height: 300px;
+            overflow-y: auto;
+            font-family: monospace;
+        }
+
+        .log-entry {
+            margin: 5px 0;
+            padding: 2px 5px;
+            border-bottom: 1px solid #eee;
+        }
+
+        .heartbeat {
+            color: #888;
+            font-style: italic;
+        }
+
+        .error {
+            color: red;
+            font-weight: bold;
+        }
+        .content-box {
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 40px;
+            border-radius: 12px;
+            text-align: center;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.4);
+        }
+
+    </style>
     <script>
         function checkStatus() {
             fetch('/check_device_status')
@@ -28,7 +106,10 @@
     </script>
 </head>
 <body>
-    <h1>Canceling PIV Process</h1>
-    <p id="status"> Waiting for the PIV process to terminate...</p>
+    <div class="content-box">
+        <h1>Canceling PIV Process</h1>
+        <p id="status">Waiting for the PIV process to terminate...</p>
+        <div class="spinner"></div>
+    </div>
 </body>
 </html>

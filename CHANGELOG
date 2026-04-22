@@ -1,0 +1,31 @@
+# SPEC Changelog
+
+All notable changes to this project will be documented in this file.
+
+## [Unreleased]
+- Discharge calculations based on user-supplied transect.
+
+### Added
+
+- v1.1 Added in IMU taring to correct pitch and roll angles for differences in IMU hardware.
+- v1.2 Added new trapezoid method to better follow real world parallel lines. 
+- v1.2 Added PIV "night mode" so PIV is not run while it is dark out. 
+- v1.2 Added checks before running a PIV test or run, that the output vector space provides a proper interrogation area and that the mask matches the trapezoid transformed image. 
+- v1.2 Added a check that the IMU and camera are plugged in and alerts user if not. 
+
+### Changed
+
+- v1.1 Changed video format for better live and saved video quality.
+- v1.0 Updated setup README with new sled mount images. Updated SPEC_DOCS as well.
+- v1.2 Updated setup README with correct function path and new Raspberry Pi Imager directions. 
+- v1.2 Updated all documentation in Docs as well. 
+- v1.2 Updated app functionality to work with new trapezoid method. 
+
+
+### Fixed
+
+- v1.0 Removed leading / in /calib.json from save and load file paths which was preventing the file from being saved.
+- v1.0 Fixed file path name from OffsiteProcessing to Offsite_Processing
+- v1.0 Updated 3D print files with new zip file including missing part.
+- v1.2 Fixed SPEC and TRiVIA differences in preprocessing, call_piv_lab, ensemble_piv.
+- v1.2 Fixed cancel PIV page to display with correct design. 
