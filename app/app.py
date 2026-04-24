@@ -942,6 +942,7 @@ def start_imu_thread():
         try:
             imu.loadCalibDataFromFile(os.path.join(BASE_DIR, "IMU/calib.json"))
         except Exception:
+            print("IMU calibration file not found, proceeding without calibration data. Run through the calibration proceedure.")
             pass
 
         # Start the thread
