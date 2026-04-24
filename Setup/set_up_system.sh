@@ -1,5 +1,6 @@
 #!/bin/bash
 # set -xe
+#Addressing continous errors on the install, updated by Ryan Johnson, 4-24-2026
 
 # Get the directory the user ran the script from
 CURRENT_DIR_NAME="$(basename "$PWD")"
@@ -23,19 +24,32 @@ sudo apt install -y hostapd
 sudo apt-get update
 sudo apt install -y dnsmasq
 sudo apt update
+sudo apt upgrade -y #added the upgrade to address some of the issues with the install,come back and remove if it causes package conflicts
 # Step 2: Install Python and GStreamer Related Packages
-echo "Installing Python 3.11 and GStreamer packages..."
-sudo apt install -y python3
-sudo apt install -y python3-pip
-sudo apt install -y python3-flask
-sudo apt install -y python3-matplotlib
-sudo apt install -y python3-numpy
-sudo apt install -y python3-opencv
-sudo apt install -y python3-pandas
-sudo apt install -y python3-watchdog
-sudo apt install -y python3-skimage
-sudo apt-get -y install jq
-sudo apt install -y gstreamer1.0-tools gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav
+
+# echo "Installing Python 3 and GStreamer packages..."
+# sudo apt install -y python3
+# sudo apt install -y python3-pip
+# sudo apt install -y python3-flask
+# sudo apt install -y python3-matplotlib
+# sudo apt install -y python3-numpy
+# sudo apt install -y python3-opencv
+# sudo apt install -y python3-pandas
+# sudo apt install -y python3-watchdog
+# sudo apt install -y python3-skimage
+# sudo apt-get -y install jq
+# sudo apt install -y gstreamer1.0-tools gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav
+
+# Step 2. Virtual Environment
+echo " Creating Virtual Environment and Installing Python and GStreamer packages..."
+sudo apt install -y python3 python3-venv python3-pip jq
+sudo apt install -y gstreamer1.0-tools gstreamer1.0-plugins-base \
+gstreamer1.0-plugins-good gstreamer1.0-plugins-bad \
+gstreamer1.0-plugins-ugly gstreamer1.0-libav
+python3 -m venv venv
+source venv/bin/activate
+pip install --upgrade pip
+pip install flask flask-login numpy pandas matplotlib opencv-python scikit-image watchdog
 
 # Step 3: Install wget, ffmpeg, v4l2loopback
 sudo apt install -y wget
@@ -86,12 +100,15 @@ run_all_piv_script="test_PIV.sh"
 sed -i "s|^ExecStart=.*|ExecStart=${CURRENT_DIR}/System/captive_start.sh|" "$captive_portal_rule"
 sed -i "s|^ExecStart=.*|ExecStart=/bin/bash ${CURRENT_DIR}/System/start_loopback_streams.sh|" "$gstreamer_service"
 sed -i "s|^ExecStart=.*|ExecStart=/bin/bash ${CURRENT_DIR}/run_PIV.sh|" "$start_piv_Service"
-sed -i "s|^ExecStart=.*|ExecStart=/usr/bin/python3 ${CURRENT_DIR}/app/app.py|" "$start_app_service"
+#sed -i "s|^ExecStart=.*|ExecStart=/usr/bin/python3 ${CURRENT_DIR}/app/app.py|" "$start_app_service"
+#If using virtual environment, update the ExecStart lines to activate the virtual environment before running the commands
+sed -i "s|^ExecStart=.*|ExecStart=${CURRENT_DIR}/venv/bin/python ${CURRENT_DIR}/app/app.py|" "$start_app_service"
 sed -i "s|^WorkingDirectory=.*|WorkingDirectory=${CURRENT_DIR}|" "$start_piv_Service"
 sed -i "s|^WorkingDirectory=.*|WorkingDirectory=${CURRENT_DIR}|" "$start_app_service"
 
-sed -i "s|^ExecStart=.*|ExecStart=/usr/bin/python3 ${CURRENT_DIR}/System/disk_space_manager.py|" "$disk_space_service"
-
+#sed -i "s|^ExecStart=.*|ExecStart=/usr/bin/python3 ${CURRENT_DIR}/System/disk_space_manager.py|" "$disk_space_service"
+#If using venv
+sed -i "s|^ExecStart=.*|ExecStart=${CURRENT_DIR}/venv/bin/python ${CURRENT_DIR}/System/disk_space_manager.py|" "$disk_space_service"
 sed -i "s|^PARENT_DIR=.*|PARENT_DIR='$CURRENT_DIR'|" "$test_script"
 sed -i "s|^PARENT_DIR=.*|PARENT_DIR='$CURRENT_DIR'|" "$run_all_piv_script"
 
