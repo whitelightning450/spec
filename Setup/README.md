@@ -85,28 +85,62 @@ In order to mount all of the pieces of the SPEC system together, we have a 3D-Pr
 **Note: In order to properly run the SPEC software, the IMU and camera need to be connected to the Pi!!!!!!!**
 
 ##### 1. Download and install the [Raspberry Pi Imager](https://www.raspberrypi.com/software/) on your computer and insert the microSD card
-Select the operating system with or without the desktop. The desktop version is not necessary and will use more power (though you can turn off booting to desktop later). 
+> Select the device you will be using, we use the Raspberry Pi 5.
+>
+> <img src="/app/static/images/RPi_imager_install_screen1.png" alt="raspberry pi imager, select device" width="500" /><br>
+>
+> Select the operating system with or without the desktop. The desktop version (top) is not necessary and will use more power (though you can turn off booting to desktop later).
+>
+> <img src="/app/static/images/RPi_imager_install_screen1.png" alt="raspberry pi imager, select operating system" width="500" /><br>
+>
+> Select the storage device you wish to flash with the Pi Image.
+>
+> <img src="/app/static/images/RPi_imager_install_screen3.png" alt="raspberry pi imager, select storage" width="500" /><br>
 
-<img src="/app/static/images/RPi_imager_install_screen_1.png" alt="raspberry pi imager, select operating system" width="500" /><br>
-*Desktop version, Raspberry Pi OS* <br><br>
-<img src="/app/static/images/RPi_imager_install_screen_2.png" alt="raspberry pi imager, select operating system" width="500" /><br> 
-*Non-desktop version, Raspberry Pi OS Lite* <br>
 <!--![Raspberry Pi installer 1](/app/static/images/RPi_imager_install_screen_1.png)-->
 
 ##### 2.  During the imaging setup, you will be asked to apply customization settings. Select Yes (or Edit settings if this is not the first time using the software).
-<img src="/app/static/images/RPi_imager_install_OS_customisation_0.png" alt="raspberry pi imager, install customisation general tab" width="400" /><br>
+
+> 2a. Set Hostname for system.
+>
+> <img src="/app/static/images/RPi_imager_install_screen4.png" alt="raspberry pi imager, set hostname" width="400" /><br>
+>
+> 2b. Set region SPEC will be in.
+>
+> <img src="/app/static/images/RPi_imager_install_screen5.png" alt="raspberry pi imager, set region" width="400" /><br>
+>
+> 2c. Set username and password
+>
+> <img src="/app/static/images/RPi_imager_install_screen6.png" alt="raspberry pi imager, set username" width="400" /><br>
+>
+> 2d. Set Wi-Fi, leave this section blank if you have an ethernet connection just hit NEXT. If you need to use Wi-Fi fill this out > to connect to your network. Our system creates a Wi-Fi access point that may run into issues with setting up an SSID here as we > have not tested it thoroughly.
+>
+> <img src="/app/static/images/RPi_imager_install_screen7.png" alt="raspberry pi imager, set wifi" width="400" /><br>
+>
+> 2e. Set remote access, allow SSH and Use password authentication.
+>
+> <img src="/app/static/images/RPi_imager_install_screen8.png" alt="raspberry pi imager, set ssh" width="400" /><br>
+>
+> 2f. Set Raspberry Pi Connect - leave this off.
+>
+> <img src="/app/static/images/RPi_imager_install_screen9.png" alt="raspberry pi imager, set pi connect" width="400" /><br>
 <!--![Raspberry Pi installer 2](/app/static/images/RPi_imager_install_screen_2.png)-->
-##### 3. Fill in all the fields in the General tab,and select Enable SSH with Use password authentication on the Services tab.
-<img src="/app/static/images/RPi_imager_install_OS_customisation_1.png" alt="raspberry pi imager, install customisation general tab" width="400" /><br>
-<img src="/app/static/images/RPi_imager_install_OS_customisation_2.png" alt="raspberry pi imager, install customisation general tab" width="400" /><br>
-##### 4. When settings are complete, select Save and you will be prompted to create the image.
-<img src="/app/static/images/RPi_imager_install_OS_customisation_3.png" alt="raspberry pi imager, install customisation general tab" width="400" /><br>
-##### 5. Power Up: This step assumes that you either have a monitor/keyboard/mouse plugged into the Pi, OR you have connected "headlessly" to the Pi. 
+##### 3. Review system configuration and then press WRITE.
+
+<img src="/app/static/images/RPi_imager_install_screen10.png" alt="raspberry pi imager, review config" width="400" /><br>
+
+##### 4. Power Up: This step assumes that you either have a monitor/keyboard/mouse plugged into the Pi, OR you have connected "headlessly" to the Pi. 
 Once the image has been created, plug everything into the Pi EXCEPT the power. Place the SD card into the Pi and insert the power cable from the official Raspberry Pi power supply. 
-##### 6. Confirm Pi is connected to the internet via wifi, or plug in an ethernet cable.
+##### 5. Confirm Pi is connected to the internet via wifi, or plug in an ethernet cable.
 
 ## SPEC Software Installation
 **Note: In order to properly run the SPEC software, the IMU and camera need to be connected to the Pi!!!!!!!**
+##### Pre-Check
+`sudo apt update`
+
+`sudo apt upgrade -y`
+
+
 ##### 1. Clone the SPEC repository. 
 `git clone https://github.com/<USERNAME>/Flow_Academy_Spec.git`
 
@@ -115,6 +149,7 @@ Once the image has been created, plug everything into the Pi EXCEPT the power. P
 `./Setup/set_up_system.sh`<br>
 
 During the install, you will need to enter an SSID and password for you device. This is to connect to it in the field from a laptop. Example:
+
 `SSID: <lowercaseinitials>spec`<br>
 `password:  <lowercaseinitials>_spec!`<br>
 
