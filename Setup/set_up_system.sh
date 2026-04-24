@@ -25,6 +25,7 @@ sudo apt-get update
 sudo apt install -y dnsmasq
 sudo apt update
 sudo apt upgrade -y #added the upgrade to address some of the issues with the install,come back and remove if it causes package conflicts
+sudo apt install -y libgl1 libglib2.0-0 # to have open-cv work
 # Step 2: Install Python and GStreamer Related Packages
 
 # echo "Installing Python 3 and GStreamer packages..."
@@ -49,7 +50,8 @@ gstreamer1.0-plugins-ugly gstreamer1.0-libav
 python3 -m venv venv
 source venv/bin/activate
 pip install --upgrade pip
-pip install flask flask-login numpy pandas matplotlib opencv-python scikit-image watchdog
+pip install flask flask-login numpy pandas matplotlib opencv-python scikit-image watchdog os glob pickle cv2 threadding json time logging psutil datetime shutil re pwd subprocess traceback
+sudo apt install -y python3-smbus i2c-tools
 
 # Step 3: Install wget, ffmpeg, v4l2loopback
 sudo apt install -y wget
