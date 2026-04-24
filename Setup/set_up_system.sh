@@ -69,7 +69,9 @@ iface wlan0 inet static
     broadcast 192.168.0.255
 EOL"
 
-sudo sed -i '/^#net.ipv4.ip_forward=1/s/^#//' /etc/sysctl.conf
+#sudo sed -i '/^#net.ipv4.ip_forward=1/s/^#//' /etc/sysctl.conf
+echo "net.ipv4.ip_forward=1" | sudo tee /etc/sysctl.d/99-ipforward.conf #was giving error on the sysctl.conf file, so creating a new conf file in the sysctl.d directory
+sudo sysctl --system
 sudo rfkill unblock wifi
 
 # Apply the network changes
