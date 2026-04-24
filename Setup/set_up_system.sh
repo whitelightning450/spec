@@ -24,8 +24,8 @@ sudo apt-get update
 sudo apt install -y dnsmasq
 sudo apt update
 # Step 2: Install Python and GStreamer Related Packages
-echo "Installing Python and GStreamer packages..."
-sudo apt install -y python3
+echo "Installing Python 3.11 and GStreamer packages..."
+sudo apt install -y python3.11 python3.11-venv python3.11-distutils
 sudo apt install -y python3-pip
 sudo apt install -y python3-flask
 sudo apt install -y python3-matplotlib
