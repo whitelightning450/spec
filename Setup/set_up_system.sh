@@ -49,7 +49,7 @@ gstreamer1.0-plugins-ugly gstreamer1.0-libav
 python3 -m venv venv --system-site-packages
 source venv/bin/activate
 pip install --upgrade pip
-pip install flask flask-login numpy pandas matplotlib opencv-python imusensor psutil pandas-stubs easydict
+pip install flask flask-login numpy pandas matplotlib opencv-python imusensor psutil pandas-stubs easydict watchdog scikit-image
 
 # Step 3: Install wget, ffmpeg, v4l2loopback
 sudo apt install -y wget
@@ -191,11 +191,24 @@ sudo systemctl disable nginx
 
 
 #Step 8: Start IMU
+# sudo raspi-config nonint do_i2c 0
+# sudo pip3 install --break-system-packages imusensor
+# sudo pip3 install --break-system-packages easydict
+# sudo pip3 install --break-system-packages flask_login
+# #Step 9: Make necessary scripts executable
+# sudo chmod +x run_PIV.sh
+# sudo chmod +x test_PIV.sh
+# sudo chmod +x System/start_loopback_streams.sh
+# sudo chmod +x System/captive_start.sh
+
+# Step 8: Start IMU
 sudo raspi-config nonint do_i2c 0
-sudo pip3 install --break-system-packages imusensor
-sudo pip3 install --break-system-packages easydict
-sudo pip3 install --break-system-packages flask_login
-#Step 9: Make necessary scripts executable
+
+# Install Python dependencies in venv
+source venv/bin/activate
+pip install easydict
+
+# Step 9: Make necessary scripts executable
 sudo chmod +x run_PIV.sh
 sudo chmod +x test_PIV.sh
 sudo chmod +x System/start_loopback_streams.sh
