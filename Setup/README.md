@@ -157,9 +157,7 @@ Make these the same as your Pi5 set up
 
 You will also need to set up a hostname and password, this can be the same as the SSID/password for now. When the install has completed:
 
-`sudo reboot`<br>
-
-##### 3. To confirm the install is successful, connect a device to its captive portal. For example, on a mobile device, look for the Pi's wifi access point that you previously set. If you reach the SPEC login page, the system is working.
+At this stage, your Pi should be set up, it should function as a server putting out wifi while also be connected to the internet. This is key to stay here and so some basic trouble shooting, as it is our only option to download any missing packages that may not have installed during the setup.sh file. Do not reboot yet, as this will close off our internet connection.
 
 ## SPEC IMU Calibration, Camera Calibration and Camera Parameters
 It is <strong><mark>critical</mark></strong> to calibrate the camera and the IMU before going out to your field site to set up the system. The camera calibration will enable you to obtain the focal length of your camera experimentally, which is especially useful if the camera manufacturer does not provide this parameter directly.
@@ -233,6 +231,8 @@ Acceleration in z (downward) should be about 9.8 m/s^2^ and the pitch and roll a
 - The number in the [first row, first column], or the [0,0] element, of your camera calibration is the focal length in the x-direction in pixels. The number in the [second row, second column], or the [1,1] element, is the focal length in the y-direction in pixels. These should be close, so choose one.  
 - On the camera parameters page, we calculate your focal length in mm by multiplying your reduced resolution camera pixel size (also calculated for you on the camera parameters page). For example, element [0,0] is 1.02444e+03. Our camera reduced resolution pixel size is 0.0029 mm. focal length = 1024.44*0.0029 = 2.97 mm.
 
+##### 3. To confirm the install is successful, connect a device to its captive portal. For example, on a mobile device, look for the Pi's wifi access point that you previously set. If you reach the SPEC login page, the system is working.
+
 ##### 4. Configure Camera Parameters
 - Connect to the SPEC app via wifi.
 - Log in with the user credentials you selected.
@@ -248,8 +248,12 @@ Acceleration in z (downward) should be about 9.8 m/s^2^ and the pitch and roll a
 
 ##### Optional: Customizing Background Image
 The SPEC web application has a default background image that you may wish to change. Rename your image to app_bg.jpg and place it in the /app/static/images folder. You will need to restart the app service manually via
+
 `sudo systemctl restart start_app.service`
+
 or simply reboot or power cycle the Pi.
+
+`sudo apt reboot`
 
 
 
