@@ -13,7 +13,7 @@ address = 0x68
 bus = smbus.SMBus(1)
 imu = MPU9250.MPU9250(bus, address)
 imu.begin()
-imu.loadCalibDataFromFile(os.path.join(BASE_DIR, "/calib.json"))
+imu.loadCalibDataFromFile(os.path.join(BASE_DIR, "calib.json"))
 while True:
     imu.readSensor()
     imu.computeOrientation()
